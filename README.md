@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/danielcregg/non-stop-work/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/Version-2.0.0-green.svg" alt="Version 2.0.0">
+  <img src="https://img.shields.io/badge/Version-3.0.0-green.svg" alt="Version 3.0.0">
   <img src="https://img.shields.io/badge/Claude%20Code-blueviolet.svg" alt="Claude Code">
   <img src="https://img.shields.io/badge/Claude%20Desktop-blueviolet.svg" alt="Claude Desktop">
 </p>
@@ -129,6 +129,20 @@ Uses [ntfy.sh](https://ntfy.sh) — a free, open-source push notification servic
 
 ## Key Features
 
+### Unified Naming (tmux + Claude + ntfy)
+
+One name for everything. When the skill starts, it generates a session name like `myproject-437` and uses it for:
+
+```
+tmux session:    tmux attach -t myproject-437
+Claude session:  claude --resume myproject-437
+ntfy topic:      https://ntfy.sh/myproject-437
+```
+
+- The 3-digit random suffix makes the ntfy topic hard to guess
+- tmux sessions survive SSH disconnects — reconnect and see exactly where things stand
+- Claude sessions can be resumed by name if context is cleared
+
 ### Circuit Breaker
 
 Three consecutive failures on the same task? Claude stops retrying, notifies you, and moves to the next task. No infinite loops.
@@ -189,14 +203,17 @@ Only notifies on **changes or problems** — no spam.
 | Feature | non-stop-work | Ralph Loop (bash) | pickle-rick | wiggum |
 |---------|:------------:|:-----------------:|:-----------:|:------:|
 | Native Claude Code skill | Yes | No | No | No |
+| Unified naming (tmux + Claude + ntfy) | Yes | No | No | No |
+| tmux session management | Yes | No | Partial | No |
 | Push notifications | Yes (ntfy) | No | No | No |
-| Service monitoring | Yes | No | No | No |
+| Service monitoring (via /loop) | Yes | No | No | No |
 | External AI reviews | Yes (Codex + Gemini) | No | No | No |
 | Circuit breakers | Yes | No | Yes | Yes |
 | Parallel execution | Yes | No | Partial | No |
 | Progress tracking | Yes (tasks) | Via git | Via git | Via git |
 | Works inside Claude | Yes | External wrapper | External wrapper | External wrapper |
 | Rate limit recovery | Yes | No | Yes | No |
+| Uses Claude Code built-ins (/loop, /rename) | Yes | N/A | N/A | N/A |
 | No external setup | Yes | Needs bash script | Needs bash script | Needs brew |
 
 ---
@@ -277,7 +294,8 @@ tokens, write integration tests, update API docs.
 
 | Version | Date | Changes |
 |---------|------|---------|
-| **2.0.0** | 2026-03-25 | Generalized for any project. Added circuit breakers, rate limit recovery, Gemini integration, made ntfy optional. Published to GitHub. |
+| **3.0.0** | 2026-03-25 | tmux session management with unified naming. Leverages built-in `/loop` for monitoring instead of custom loops. Uses `/rename` for Claude session naming. |
+| 2.0.0 | 2026-03-25 | Generalized for any project. Circuit breakers, rate limit recovery, Gemini integration. Published to GitHub. |
 | 1.0 | 2026-02 | Initial skill for HPC autonomous work. |
 
 ---

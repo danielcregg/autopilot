@@ -1,13 +1,13 @@
 ---
 name: non-stop-work
-version: 2.0.0
+version: 3.0.0
 description: |
   Autonomous work mode — Claude works through a plan non-stop without asking
-  questions. Uses background tasks, parallel execution, sleep timers, Codex/Gemini
-  for code reviews, and optional ntfy push notifications. Three modes: execute a
-  plan, resume previous work, or monitor running services. Includes circuit breakers
-  to detect failures and rate limit recovery. The only native Claude Code skill
-  for autonomous, unattended work with real-time notifications.
+  questions. Sets up a named tmux session with the same name used for the Claude
+  session and ntfy push notifications. Uses background tasks, parallel execution,
+  Codex/Gemini for code reviews, and circuit breakers. Leverages Claude Code's
+  built-in /loop for monitoring and auto mode for permissions. The only native
+  skill for autonomous, unattended work with real-time phone notifications.
 disable-model-invocation: true
 user-invocable: true
 argument-hint: "[plan description | 'continue' | 'monitor' [service...]]"
@@ -40,67 +40,88 @@ You are now in **non-stop work mode**. You work through tasks autonomously witho
 |---|---|
 | `<plan description>` | Execute the described plan autonomously |
 | `continue` | Resume from the task list where you left off |
-| `monitor <services...>` | Periodic health checks on named services |
-| `monitor` (no args) | Auto-detect what to monitor from context |
+| `monitor <services...>` | Use built-in `/loop` to monitor services periodically |
 
-Modes can be combined: execute a plan while monitoring services in parallel.
+---
+
+## Step 0: Session Setup (Unified Naming)
+
+Create a unified session name used everywhere — tmux, Claude session, and ntfy topic.
+
+### Generate the Session Name
+
+```bash
+PROJECT_NAME=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || basename "$PWD")")
+SESSION_SUFFIX=$(shuf -i 100-999 -n 1 2>/dev/null || echo $((RANDOM % 900 + 100)))
+SESSION_NAME="${PROJECT_NAME}-${SESSION_SUFFIX}"
+echo "Session name: $SESSION_NAME"
+```
+
+### Set Up tmux Session
+
+If tmux is available, create a named session so all work happens in a persistent, recoverable terminal:
+
+```bash
+# Check if we're already in a tmux session
+if [ -z "$TMUX" ]; then
+  # Create a new named tmux session (detached)
+  tmux new-session -d -s "$SESSION_NAME" 2>/dev/null || true
+  echo "tmux session created: $SESSION_NAME"
+  echo "Attach with: tmux attach -t $SESSION_NAME"
+fi
+```
+
+If tmux is not available, skip — the skill works without it.
+
+### Name the Claude Session
+
+Use the built-in `/rename` command to match the tmux session:
+
+```
+/rename <SESSION_NAME>
+```
+
+This way the user can resume with `claude --resume <SESSION_NAME>`.
+
+### Set Up ntfy Notifications
+
+The ntfy topic uses the same session name (with the random suffix already built in for privacy):
+
+```bash
+NTFY_TOPIC="$SESSION_NAME"
+echo "ntfy topic: $NTFY_TOPIC"
+echo "Subscribe: https://ntfy.sh/$NTFY_TOPIC"
+```
+
+**Tell the user** the session name and ntfy topic so they can:
+- Attach to tmux: `tmux attach -t <SESSION_NAME>`
+- Resume Claude: `claude --resume <SESSION_NAME>`
+- Subscribe to notifications: `https://ntfy.sh/<SESSION_NAME>`
+
+If the user provides their own ntfy topic or says they don't want notifications, respect that.
+
+### Summary of Unified Naming
+
+```
+SESSION_NAME = project-name-123
+
+tmux session:    tmux attach -t project-name-123
+Claude session:  claude --resume project-name-123
+ntfy topic:      https://ntfy.sh/project-name-123
+```
+
+All three use the same name. One name to remember, one name to share.
 
 ---
 
 ## Core Rules
 
-1. **Never stop to ask the user a question.** Make a reasonable decision, document it, and move on. If you genuinely need a code review or second opinion, use Codex or Gemini (see below).
-2. **Never wait idly.** While a background task runs, pick up the next independent task or do preparatory work.
+1. **Never stop to ask the user a question.** Make a reasonable decision, document it, and move on. If you need a code review or second opinion, use Codex or Gemini.
+2. **Never wait idly.** While a background task runs, pick up the next independent task.
 3. **Use background tasks for anything that takes more than 30 seconds.** Kick it off, work on something else, check back later.
-4. **Track progress visibly.** Update tasks after each step. The user should be able to see where things stand at any time.
-5. **Send push notifications** for all status updates (if ntfy is configured).
-6. **Stop if you detect a failure loop.** Three consecutive failures on the same task = stop, notify the user, move to the next task.
-
----
-
-## Step 0: Set Up Notifications (Optional but Recommended)
-
-If the user wants push notifications to their phone/desktop via [ntfy.sh](https://ntfy.sh):
-
-```bash
-PROJECT_NAME=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || basename "$PWD")")
-NTFY_SUFFIX=$(shuf -i 100-999 -n 1 2>/dev/null || echo $((RANDOM % 900 + 100)))
-NTFY_TOPIC="${PROJECT_NAME}-${NTFY_SUFFIX}"
-echo "ntfy topic: $NTFY_TOPIC"
-```
-
-**Tell the user the topic name** so they can subscribe at `https://ntfy.sh/<topic>`.
-
-If the user provides a topic or one exists in memory, reuse it. If the user says they don't want notifications, skip all ntfy calls.
-
-### Notification Helper
-
-```bash
-# Standard notification
-curl -s -H "Title: Agent Update" -d "Task 3/7 complete: refactored auth module" https://ntfy.sh/$NTFY_TOPIC
-
-# Urgent (needs attention)
-curl -s -H "Title: NEEDS ATTENTION" -H "Priority: urgent" -H "Tags: warning" \
-  -d "Stuck on task 5 after 3 attempts. Please check in." https://ntfy.sh/$NTFY_TOPIC
-```
-
-### When to Notify
-
-| Event | Priority | Tags |
-|-------|----------|------|
-| Work started | default | rocket |
-| Task completed | default | white_check_mark |
-| Background job submitted | default | hourglass |
-| Background job finished | high | tada |
-| Tests passing | default | white_check_mark |
-| Tests failing | high | warning |
-| Error / failure | high | x |
-| Stuck (after circuit breaker) | urgent | sos |
-| All work complete | urgent | tada |
-| Service alert (monitor mode) | urgent | warning |
-| Periodic status report | default | clipboard |
-
-**Always include**: task number (e.g., "3/7"), what happened, and what you're doing next.
+4. **Track progress visibly.** Update tasks after each step.
+5. **Send push notifications** for status updates (if ntfy is configured).
+6. **Circuit breaker: 3 strikes.** Three consecutive failures on the same task = stop, notify, move on.
 
 ---
 
@@ -111,7 +132,7 @@ When given a plan or `continue`:
 ### 1. Load the Plan
 - If given a description: break it into discrete tasks
 - If `continue`: check `TaskList` for pending work
-- If a plan file exists in the project (e.g., `PLAN.md`): read it
+- If a plan file exists (e.g., `PLAN.md`): read it
 
 ### 2. Create Tasks
 Use `TaskCreate` for each step. Set dependencies with `addBlockedBy` where needed.
@@ -122,11 +143,11 @@ For each task:
 
 ```
 1. Mark task as in_progress
-2. Send notification: "Starting task N/M: <description>"
+2. Notify: "Starting task N/M: <description>"
 3. Do the work
-4. Run tests / validate the result
+4. Run tests / validate
 5. Mark task as completed
-6. Send notification: "Task N/M complete. Moving to N+1."
+6. Notify: "Task N/M complete. Moving to N+1."
 7. Immediately start the next unblocked task
 ```
 
@@ -135,7 +156,7 @@ For each task:
 If two tasks are independent:
 - Start one as a background task (`run_in_background: true`)
 - Work on the other in the foreground
-- Check back on the background task when the foreground one is done
+- Check back on the background task when done
 
 ### 5. Handle Failures (Circuit Breaker)
 
@@ -145,58 +166,36 @@ Attempt 2: Debug the error, try a different approach
 Attempt 3: Ask Codex/Gemini for help, apply their suggestion
 
 If all 3 attempts fail:
-  - Send urgent notification
-  - Log the failure with full context
-  - Mark task as blocked
-  - Move to the next unblocked task
-  - DO NOT keep retrying the same thing
+  → Send urgent notification
+  → Log the failure with full context
+  → Mark task as blocked
+  → Move to the next unblocked task
+  → DO NOT keep retrying the same thing
 ```
 
 ### 6. Final Report
 
-When all tasks are done (or all remaining are blocked):
-- Run a final verification (tests, lint, build)
-- Send an urgent ntfy with a full summary
-- Output the summary to the conversation
+When all tasks complete (or all remaining are blocked):
+- Run final verification (tests, lint, build)
+- Send urgent ntfy with full summary
+- Output summary to conversation
 
 ---
 
 ## Monitor Mode
 
-When given `monitor` or when services are running alongside plan work.
+For monitoring, use Claude Code's **built-in `/loop`** command rather than custom background loops. This is more reliable and survives context compaction.
 
-### How It Works
-
-1. **Identify targets** from context, memory files, CLAUDE.md, or the user's arguments
-2. **Set up background check loops** with appropriate intervals
-3. **Only notify on changes or problems** — don't spam
-4. **Stay responsive** between checks — monitoring runs in the background
-
-### Default Intervals
-
-| Check Type | Interval | Examples |
-|---|---|---|
-| Critical services | 15 min | API endpoints, web servers, databases |
-| Infrastructure | 30 min | SSH connectivity, pod status, disk usage |
-| Batch jobs | 1 hr | Slurm jobs, CI pipelines, long builds |
-| Resource quotas | 4 hr | Cloud quotas, billing, rate limits |
-| Full status report | 8 hr | Aggregate all checks |
-
-### Monitor Check Pattern
-
-```bash
-# Run as background task with sleep loop
-while true; do
-  RESULT=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://api.example.com/health")
-  if [ "$RESULT" != "200" ]; then
-    curl -s -H "Title: SERVICE DOWN" -H "Priority: urgent" -H "Tags: warning" \
-      -d "Health check failed: HTTP $RESULT" https://ntfy.sh/$NTFY_TOPIC
-  fi
-  sleep 900  # 15 minutes
-done
+```
+/loop 15m Check if https://api.example.com/health returns 200. If not, send ntfy alert.
+/loop 30m SSH to staging and check disk usage. Alert if over 85%.
+/loop 1h Check if Slurm job $JOB_ID is still running. Notify when complete.
+/loop 8h Compile a full status report of all services and send via ntfy.
 ```
 
-### Common Check Patterns
+The `/loop` command handles the scheduling. Your job is just to define what to check and what to do with the result.
+
+### Quick Health Check Patterns
 
 **HTTP endpoint:**
 ```bash
@@ -216,136 +215,198 @@ kubectl get pods -o wide 2>/dev/null
 
 **Disk usage:**
 ```bash
-df -h / | awk 'NR==2 {print $5}' | tr -d '%'  # returns number, alert if >85
+df -h / | awk 'NR==2 {print $5}' | tr -d '%'
 ```
 
-**Process running:**
+**Process check:**
 ```bash
 pgrep -f "process_name" >/dev/null && echo "running" || echo "stopped"
 ```
 
-### Status Report Format
+---
 
-Every 8 hours (or on request), compile:
+## Push Notifications via ntfy
 
+Uses [ntfy.sh](https://ntfy.sh) — free, open-source, no account needed.
+
+### Notification Helper
+
+```bash
+# Standard update
+curl -s -H "Title: $SESSION_NAME" -d "Task 3/7 complete: auth module done" https://ntfy.sh/$NTFY_TOPIC
+
+# Urgent (needs attention)
+curl -s -H "Title: $SESSION_NAME - ATTENTION" -H "Priority: urgent" -H "Tags: warning" \
+  -d "Stuck on task 5 after 3 attempts." https://ntfy.sh/$NTFY_TOPIC
+
+# All done
+curl -s -H "Title: $SESSION_NAME - COMPLETE" -H "Priority: urgent" -H "Tags: tada" \
+  -d "All 8 tasks complete. Tests passing. Ready for review." https://ntfy.sh/$NTFY_TOPIC
 ```
-=== Status Report ===
-Time: <timestamp>
-Uptime: <duration since monitoring started>
 
-Services:
-  <service>: <UP/DOWN> (<response time or key metric>)
+### When to Notify
 
-Recent events:
-  <timestamp>: <event description>
+| Event | Priority | Tags |
+|-------|----------|------|
+| Work started | default | rocket |
+| Task completed | default | white_check_mark |
+| Background job submitted | default | hourglass |
+| Background job finished | high | tada |
+| Tests passing | default | white_check_mark |
+| Tests failing | high | warning |
+| Error / failure | high | x |
+| Stuck (circuit breaker triggered) | urgent | sos |
+| All work complete | urgent | tada |
+| Service alert (monitor mode) | urgent | warning |
 
-Tasks:
-  Completed: X/Y
-  In progress: Z
-  Blocked: W
-
-Next checks:
-  <check> in <time>
-```
+**Always include**: task number (e.g., "3/7"), what happened, what's next.
 
 ---
 
 ## Asking Other AI Models for Help
 
-When you need a code review, debugging help, or a second opinion — don't ask the user. Ask another AI model instead.
+Don't ask the user. Ask another AI model instead.
 
 ### Codex (OpenAI)
 
 ```bash
 codex exec review -m gpt-5 --full-auto --skip-git-repo-check \
-  "Review the recent changes for correctness, security issues, and edge cases."
+  "Review the recent changes for correctness, security, and edge cases."
 ```
 
 ### Gemini (Google)
 
 ```bash
-gemini -m gemini-2.5-pro --yolo -p "Review this code for bugs and suggest improvements."
+gemini -m gemini-2.5-pro --yolo -p "Review this code for bugs and improvements."
 ```
 
 ### When to Use External Reviews
 
-- **Before** kicking off a long-running task (training, deployment, migration)
-- **After** a complex refactor, to catch issues you might have missed
-- **When debugging** a persistent failure — fresh perspective helps
-- **For architecture decisions** where multiple approaches are valid
-
-Read the review output and incorporate feedback before proceeding.
+- **Before** deploying or running expensive operations
+- **After** a complex refactor
+- **When debugging** a persistent failure (fresh perspective)
+- **For architecture decisions** with multiple valid approaches
 
 ---
 
-## Background Tasks + Sleep Timers
+## tmux Session Management
+
+If tmux is available, use it for persistent terminal sessions that survive SSH disconnects.
+
+### Creating Additional Panes
+
+For parallel visual work, split the tmux session:
 
 ```bash
-# Kick off a long task in the background
-long_running_command &
+# Split horizontally — run tests in bottom pane
+tmux split-window -v -t "$SESSION_NAME" "npm test --watch"
 
-# Use Bash tool with run_in_background: true for monitored background tasks
-# Then use TaskOutput to check on them periodically
+# Split vertically — run dev server in right pane
+tmux split-window -h -t "$SESSION_NAME" "npm run dev"
 ```
 
-**Pattern:** Start background task → work on something else → check back → notify on completion.
+### Running Long Tasks in tmux
 
-Between checks, always be working on the next task. Zero idle time.
+For tasks that need their own terminal (servers, watchers, build processes):
 
----
+```bash
+# Create a named window for the dev server
+tmux new-window -t "$SESSION_NAME" -n "server" "npm run dev"
 
-## When to Contact the User
+# Create a named window for tests
+tmux new-window -t "$SESSION_NAME" -n "tests" "npm test --watch"
+```
 
-Only reach out to the user (via ntfy urgent notification AND conversation output) if:
+### Checking tmux Status
 
-1. A **destructive or irreversible action** needs approval (delete data, force push, deploy to production)
-2. You've tried the circuit breaker (3 attempts + Codex review) and are **genuinely stuck**
-3. The **plan needs to change** (fundamental assumption was wrong, scope change needed)
-4. All tasks are **complete** — deliver the final report
-5. A **monitored service is down** and you can't fix it autonomously
+```bash
+# List all windows in the session
+tmux list-windows -t "$SESSION_NAME"
 
-For everything else, **notifications are sufficient**. The user checks in when they want to.
+# Capture output from a specific pane
+tmux capture-pane -t "$SESSION_NAME" -p | tail -20
+```
+
+### Cleanup on Completion
+
+When all work is done:
+
+```bash
+# Kill the tmux session (optional — user may want to keep it)
+# tmux kill-session -t "$SESSION_NAME"
+echo "Work complete. tmux session '$SESSION_NAME' is still running."
+echo "Attach with: tmux attach -t $SESSION_NAME"
+```
 
 ---
 
 ## Rate Limit Recovery
 
-If you hit API rate limits or throttling:
+If you hit API rate limits:
 
-1. Check the error message for a reset time
-2. Send a notification: "Rate limited. Resuming in X minutes."
-3. Use `sleep` to wait, but **work on non-API tasks in the meantime**
-4. Resume the rate-limited task after the wait period
-5. If limits persist, reduce request frequency and notify the user
+1. Check the error for a reset time
+2. Notify: "Rate limited. Resuming in X minutes."
+3. **Work on non-API tasks in the meantime**
+4. Resume after the wait period
+5. If limits persist, reduce frequency and notify
 
 ---
 
-## Summary: The Non-Stop Mindset
+## When to Contact the User
+
+Only for:
+1. **Destructive actions** — delete data, force push, deploy to production
+2. **Genuinely stuck** — 3 attempts + Codex review all failed
+3. **Plan change needed** — fundamental assumption was wrong
+4. **All done** — final summary report
+5. **Service down** — can't fix autonomously
+
+Everything else: handle it, notify via ntfy, keep working.
+
+---
+
+## The Non-Stop Mindset
 
 ```
-┌─────────────────────────────────────────────┐
-│                                             │
-│   Start task → Do work → Validate           │
-│        ↓                    ↓               │
-│   Background task?    Tests pass?           │
-│     ↓        ↓         ↓        ↓           │
-│    Yes       No       Yes       No          │
-│     ↓        ↓         ↓        ↓           │
-│  Work on    Wait    Complete   Retry (x3)   │
-│  next task  (never)  → Next    → Codex      │
-│     ↓                  task    → Move on    │
-│  Check back                                 │
-│     ↓                                       │
-│  Notify result                              │
-│                                             │
-│  NEVER: Stop to ask │ Wait idle │ Give up   │
-│  ALWAYS: Notify │ Track progress │ Move on  │
-│                                             │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│                                                 │
+│  Start task → Do work → Validate                │
+│       ↓                    ↓                    │
+│  Background?          Tests pass?               │
+│    ↓       ↓           ↓        ↓               │
+│   Yes      No         Yes       No              │
+│    ↓       ↓           ↓        ↓               │
+│  Work on   Continue   Complete  Retry (x3)      │
+│  next task            → Next    → Ask Codex     │
+│    ↓                   task     → Move on       │
+│  Check back                                     │
+│    ↓                                            │
+│  Notify result                                  │
+│                                                 │
+│  NEVER: Stop to ask │ Wait idle │ Loop forever  │
+│  ALWAYS: Notify │ Track progress │ Move on      │
+│                                                 │
+└─────────────────────────────────────────────────┘
 ```
+
+---
+
+## Leveraging Built-in Claude Code Features
+
+This skill works best with these Claude Code features:
+
+| Feature | How to Use |
+|---------|-----------|
+| **Auto mode** | Enable in settings for zero permission prompts |
+| **`/loop`** | Use for monitoring instead of custom sleep loops |
+| **`/rename`** | Align Claude session name with tmux + ntfy |
+| **`claude --resume`** | Resume a named session after disconnection |
+| **Background subagents** | Delegate independent research tasks |
+| **`-p` headless mode** | Chain multiple Claude invocations in scripts |
 
 ---
 
 ## Version History
 - v1.0 (2026-02): Initial skill for HPC autonomous work with ntfy, monitoring, and Codex integration
-- v2.0 (2026-03): Generalized for any project. Added circuit breakers, rate limit recovery, Gemini integration, made ntfy optional, updated Codex syntax, added ASCII flow diagram. Published to GitHub.
+- v2.0 (2026-03): Generalized for any project. Added circuit breakers, rate limit recovery, Gemini integration.
+- v3.0 (2026-03): Added tmux session management with unified naming (tmux + Claude session + ntfy topic all share the same name). Replaced custom monitoring loops with Claude Code's built-in `/loop`. Added section on leveraging built-in features. Published to GitHub.
