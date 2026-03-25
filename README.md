@@ -1,18 +1,18 @@
-<h1 align="center">non-stop-work</h1>
+<h1 align="center">autopilot</h1>
 
 <p align="center">
   <strong>Autonomous work mode for Claude Code — works through plans without stopping, with push notifications</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/danielcregg/non-stop-work/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://github.com/danielcregg/autopilot/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Version-3.0.0-green.svg" alt="Version 3.0.0">
   <img src="https://img.shields.io/badge/Claude%20Code-blueviolet.svg" alt="Claude Code">
   <img src="https://img.shields.io/badge/Claude%20Desktop-blueviolet.svg" alt="Claude Desktop">
 </p>
 
 <p align="center">
-  Make Claude Code work through complex plans autonomously — no stopping for questions, no waiting idle, real-time push notifications to your phone. The only native Claude Code skill for unattended autonomous work.
+  Set it and forget it. Claude works through complex plans autonomously — no stopping for questions, no waiting idle, real-time push notifications to your phone. The only native Claude Code skill for unattended autonomous work.
 </p>
 
 ---
@@ -24,7 +24,7 @@ Claude Code stops frequently to ask questions, waits for your approval on every 
 ## The Solution
 
 ```
-/non-stop-work Build a REST API with auth, database, tests, and deploy to staging
+/autopilot Build a REST API with auth, database, tests, and deploy to staging
 ```
 
 Claude works through the entire plan autonomously:
@@ -42,7 +42,7 @@ Claude works through the entire plan autonomously:
 ```bash
 # Install
 mkdir -p ~/.claude/skills
-git clone https://github.com/danielcregg/non-stop-work.git ~/.claude/skills/non-stop-work
+git clone https://github.com/danielcregg/autopilot.git ~/.claude/skills/autopilot
 ```
 
 For **Claude Desktop**: Settings > Skills > Upload skill > drag and drop `SKILL.md`.
@@ -53,9 +53,9 @@ For **Claude Desktop**: Settings > Skills > Upload skill > drag and drop `SKILL.
 
 | Mode | Invoke With | What It Does |
 |------|------------|--------------|
-| **Execute** | `/non-stop-work <plan>` | Work through a plan from start to finish |
-| **Continue** | `/non-stop-work continue` | Resume from where you left off |
-| **Monitor** | `/non-stop-work monitor` | Watch running services, alert on problems |
+| **Execute** | `/autopilot <plan>` | Work through a plan from start to finish |
+| **Continue** | `/autopilot continue` | Resume from where you left off |
+| **Monitor** | `/autopilot monitor` | Watch running services, alert on problems |
 
 Modes combine — execute a plan while monitoring services in parallel.
 
@@ -65,7 +65,7 @@ Modes combine — execute a plan while monitoring services in parallel.
 
 ### You start the work:
 ```
-/non-stop-work Build a Python Flask API with JWT auth, SQLite database,
+/autopilot Build a Python Flask API with JWT auth, SQLite database,
 CRUD endpoints for users and posts, unit tests, and deploy to Railway.
 ```
 
@@ -184,7 +184,7 @@ ALWAYS: Move to the next task
 Watch running services and get alerted on problems:
 
 ```
-/non-stop-work monitor api.example.com staging-db.internal
+/autopilot monitor api.example.com staging-db.internal
 ```
 
 | Check Type | Default Interval | Examples |
@@ -200,7 +200,7 @@ Only notifies on **changes or problems** — no spam.
 
 ## Compared to Alternatives
 
-| Feature | non-stop-work | Ralph Loop (bash) | pickle-rick | wiggum |
+| Feature | autopilot | Ralph Loop (bash) | pickle-rick | wiggum |
 |---------|:------------:|:-----------------:|:-----------:|:------:|
 | Native Claude Code skill | Yes | No | No | No |
 | Unified naming (tmux + Claude + ntfy) | Yes | No | No | No |
@@ -237,7 +237,7 @@ Everything else is handled autonomously with push notifications.
 
 ```bash
 mkdir -p ~/.claude/skills
-git clone https://github.com/danielcregg/non-stop-work.git ~/.claude/skills/non-stop-work
+git clone https://github.com/danielcregg/autopilot.git ~/.claude/skills/autopilot
 ```
 
 ### Claude Desktop
@@ -253,29 +253,29 @@ git clone https://github.com/danielcregg/non-stop-work.git ~/.claude/skills/non-
 
 ### Build a full project
 ```
-/non-stop-work Build a Next.js dashboard with Supabase auth, Prisma ORM,
+/autopilot Build a Next.js dashboard with Supabase auth, Prisma ORM,
 CRUD for projects and tasks, Tailwind styling, and deploy to Vercel.
 ```
 
 ### Resume previous work
 ```
-/non-stop-work continue
+/autopilot continue
 ```
 
 ### Monitor production services
 ```
-/non-stop-work monitor api.myapp.com db.myapp.com
+/autopilot monitor api.myapp.com db.myapp.com
 ```
 
 ### Refactor a codebase
 ```
-/non-stop-work Refactor the auth module: extract middleware, add refresh
+/autopilot Refactor the auth module: extract middleware, add refresh
 tokens, write integration tests, update API docs.
 ```
 
 ### Execute from a plan file
 ```
-/non-stop-work Execute the plan in PLAN.md
+/autopilot Execute the plan in PLAN.md
 ```
 
 ---

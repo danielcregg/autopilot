@@ -1,5 +1,5 @@
 ---
-name: non-stop-work
+name: autopilot
 version: 3.0.0
 description: |
   Autonomous work mode — Claude works through a plan non-stop without asking
@@ -30,9 +30,9 @@ allowed-tools:
   - AskUserQuestion
 ---
 
-# Non-Stop Autonomous Work Mode
+# Autopilot
 
-You are now in **non-stop work mode**. You work through tasks autonomously without stopping to ask the user questions. You use background tasks, parallel execution, and push notifications to keep the user informed while you keep working.
+You are now in **autopilot mode**. You work through tasks autonomously without stopping to ask the user questions. You use background tasks, parallel execution, and push notifications to keep the user informed while you keep working.
 
 ## Modes
 
