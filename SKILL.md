@@ -46,71 +46,87 @@ You are now in **autopilot mode**. You work through tasks autonomously without s
 
 ## Step 0: Session Setup (Unified Naming)
 
-Create a unified session name used everywhere — tmux, Claude session, and ntfy topic.
-
-### Generate the Session Name
+Create a unified session name used everywhere — tmux, Claude session, and ntfy topic. Run all setup in a **single bash block** so variables persist:
 
 ```bash
+# Generate session name (6-digit suffix for ntfy privacy)
 PROJECT_NAME=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || basename "$PWD")")
-SESSION_SUFFIX=$(shuf -i 100-999 -n 1 2>/dev/null || echo $((RANDOM % 900 + 100)))
+SESSION_SUFFIX=$(command -v shuf &>/dev/null && shuf -i 100000-999999 -n 1 || \
+  command -v gshuf &>/dev/null && gshuf -i 100000-999999 -n 1 || \
+  echo $((RANDOM * RANDOM % 900000 + 100000)))
 SESSION_NAME="${PROJECT_NAME}-${SESSION_SUFFIX}"
+
+# Save session name to file (persists across bash tool calls)
+echo "$SESSION_NAME" > /tmp/autopilot-session-name
+
+# Set up tmux if available (optional — skip if not installed)
+if command -v tmux &>/dev/null && [ -z "$TMUX" ]; then
+  # Handle collision: regenerate if session exists
+  while tmux has-session -t "$SESSION_NAME" 2>/dev/null; do
+    SESSION_SUFFIX=$((RANDOM * RANDOM % 900000 + 100000))
+    SESSION_NAME="${PROJECT_NAME}-${SESSION_SUFFIX}"
+    echo "$SESSION_NAME" > /tmp/autopilot-session-name
+  done
+  tmux new-session -d -s "$SESSION_NAME"
+  echo "tmux session: $SESSION_NAME"
+  echo "Attach with: tmux attach -t $SESSION_NAME"
+else
+  echo "tmux not available — skipping (skill works without it)"
+fi
+
+# Check ntfy.sh reachability (optional — skip if offline)
+if curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 https://ntfy.sh 2>/dev/null | grep -q "200"; then
+  echo "ntfy topic: $SESSION_NAME"
+  echo "Subscribe: https://ntfy.sh/$SESSION_NAME"
+  echo "true" > /tmp/autopilot-ntfy-enabled
+else
+  echo "ntfy.sh not reachable — notifications disabled"
+  echo "false" > /tmp/autopilot-ntfy-enabled
+fi
+
 echo "Session name: $SESSION_NAME"
 ```
 
-### Set Up tmux Session
-
-If tmux is available, create a named session so all work happens in a persistent, recoverable terminal:
-
-```bash
-# Check if we're already in a tmux session
-if [ -z "$TMUX" ]; then
-  # Create a new named tmux session (detached)
-  tmux new-session -d -s "$SESSION_NAME" 2>/dev/null || true
-  echo "tmux session created: $SESSION_NAME"
-  echo "Attach with: tmux attach -t $SESSION_NAME"
-fi
-```
-
-If tmux is not available, skip — the skill works without it.
-
-### Name the Claude Session
-
-Use the built-in `/rename` command to match the tmux session:
+After running the setup, **rename the Claude session** to match. This is a Claude Code meta-command (not bash) — type it directly:
 
 ```
 /rename <SESSION_NAME>
 ```
 
-This way the user can resume with `claude --resume <SESSION_NAME>`.
+### Reading the Session Name in Later Bash Calls
 
-### Set Up ntfy Notifications
-
-The ntfy topic uses the same session name (with the random suffix already built in for privacy):
+Since bash variables don't persist between tool calls, read from the file:
 
 ```bash
-NTFY_TOPIC="$SESSION_NAME"
-echo "ntfy topic: $NTFY_TOPIC"
-echo "Subscribe: https://ntfy.sh/$NTFY_TOPIC"
+SESSION_NAME=$(cat /tmp/autopilot-session-name)
+NTFY_ENABLED=$(cat /tmp/autopilot-ntfy-enabled 2>/dev/null || echo "false")
 ```
 
-**Tell the user** the session name and ntfy topic so they can:
-- Attach to tmux: `tmux attach -t <SESSION_NAME>`
-- Resume Claude: `claude --resume <SESSION_NAME>`
-- Subscribe to notifications: `https://ntfy.sh/<SESSION_NAME>`
+### Sending Notifications
 
-If the user provides their own ntfy topic or says they don't want notifications, respect that.
+Only send if ntfy is enabled:
+
+```bash
+SESSION_NAME=$(cat /tmp/autopilot-session-name)
+NTFY_ENABLED=$(cat /tmp/autopilot-ntfy-enabled 2>/dev/null || echo "false")
+if [ "$NTFY_ENABLED" = "true" ]; then
+  curl -s -H "Title: $SESSION_NAME" -d "Your message here" https://ntfy.sh/$SESSION_NAME
+fi
+```
 
 ### Summary of Unified Naming
 
 ```
-SESSION_NAME = project-name-123
+SESSION_NAME = myproject-847291
 
-tmux session:    tmux attach -t project-name-123
-Claude session:  claude --resume project-name-123
-ntfy topic:      https://ntfy.sh/project-name-123
+tmux session:    tmux attach -t myproject-847291
+Claude session:  claude --resume myproject-847291
+ntfy topic:      https://ntfy.sh/myproject-847291
+State file:      /tmp/autopilot-session-name
 ```
 
 All three use the same name. One name to remember, one name to share.
+The 6-digit suffix (900,000 possibilities) makes the ntfy topic hard to guess.
 
 ---
 
@@ -231,17 +247,25 @@ Uses [ntfy.sh](https://ntfy.sh) — free, open-source, no account needed.
 
 ### Notification Helper
 
+Always read session name from file (variables don't persist between bash calls):
+
 ```bash
-# Standard update
-curl -s -H "Title: $SESSION_NAME" -d "Task 3/7 complete: auth module done" https://ntfy.sh/$NTFY_TOPIC
+SESSION_NAME=$(cat /tmp/autopilot-session-name 2>/dev/null || echo "autopilot")
+NTFY_ENABLED=$(cat /tmp/autopilot-ntfy-enabled 2>/dev/null || echo "false")
 
-# Urgent (needs attention)
-curl -s -H "Title: $SESSION_NAME - ATTENTION" -H "Priority: urgent" -H "Tags: warning" \
-  -d "Stuck on task 5 after 3 attempts." https://ntfy.sh/$NTFY_TOPIC
+# Only send if ntfy is enabled
+if [ "$NTFY_ENABLED" = "true" ]; then
+  # Standard update
+  curl -s -H "Title: $SESSION_NAME" -d "Task 3/7 complete: auth module done" https://ntfy.sh/$SESSION_NAME
 
-# All done
-curl -s -H "Title: $SESSION_NAME - COMPLETE" -H "Priority: urgent" -H "Tags: tada" \
-  -d "All 8 tasks complete. Tests passing. Ready for review." https://ntfy.sh/$NTFY_TOPIC
+  # Urgent (needs attention)
+  curl -s -H "Title: $SESSION_NAME - ATTENTION" -H "Priority: urgent" -H "Tags: warning" \
+    -d "Stuck on task 5 after 3 attempts." https://ntfy.sh/$SESSION_NAME
+
+  # All done
+  curl -s -H "Title: $SESSION_NAME - COMPLETE" -H "Priority: urgent" -H "Tags: tada" \
+    -d "All 8 tasks complete. Tests passing. Ready for review." https://ntfy.sh/$SESSION_NAME
+fi
 ```
 
 ### When to Notify
@@ -265,26 +289,42 @@ curl -s -H "Title: $SESSION_NAME - COMPLETE" -H "Priority: urgent" -H "Tags: tad
 
 ## Asking Other AI Models for Help
 
-Don't ask the user. Ask another AI model instead.
+Don't ask the user. Ask another AI model instead. Always check availability first.
 
-### Codex (OpenAI)
-
-```bash
-codex exec review -m gpt-5 --full-auto --skip-git-repo-check \
-  "Review the recent changes for correctness, security, and edge cases."
-```
-
-### Gemini (Google)
+### Codex (OpenAI) — if installed
 
 ```bash
-gemini -m gemini-2.5-pro --yolo -p "Review this code for bugs and improvements."
+if command -v codex &>/dev/null; then
+  codex exec review -m gpt-5 --full-auto --skip-git-repo-check \
+    "Review the recent changes for correctness, security, and edge cases."
+else
+  echo "Codex not available — skipping external review"
+fi
 ```
+
+### Gemini (Google) — if installed
+
+```bash
+if command -v gemini &>/dev/null; then
+  gemini -m gemini-2.5-pro --yolo -p "Review this code for bugs and improvements."
+else
+  echo "Gemini not available — skipping external review"
+fi
+```
+
+### When External AI Isn't Available
+
+If neither `codex` nor `gemini` is installed:
+1. Use a Claude Code `Explore` subagent for a fresh-perspective review
+2. Document the issue with full context
+3. Mark task as needing review in the final summary
+4. Continue with the next task
 
 ### When to Use External Reviews
 
 - **Before** deploying or running expensive operations
 - **After** a complex refactor
-- **When debugging** a persistent failure (fresh perspective)
+- **When debugging** a persistent failure (attempt 3 in circuit breaker)
 - **For architecture decisions** with multiple valid approaches
 
 ---
@@ -355,7 +395,7 @@ If you hit API rate limits:
 ## When to Contact the User
 
 Only for:
-1. **Destructive actions** — delete data, force push, deploy to production
+1. **Destructive actions** — delete data, force push, deploy to **production** (staging/dev deploys are OK autonomously)
 2. **Genuinely stuck** — 3 attempts + Codex review all failed
 3. **Plan change needed** — fundamental assumption was wrong
 4. **All done** — final summary report

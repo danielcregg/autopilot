@@ -131,15 +131,15 @@ Uses [ntfy.sh](https://ntfy.sh) — a free, open-source push notification servic
 
 ### Unified Naming (tmux + Claude + ntfy)
 
-One name for everything. When the skill starts, it generates a session name like `myproject-437` and uses it for:
+One name for everything. When the skill starts, it generates a session name like `myproject-847291` and uses it for:
 
 ```
-tmux session:    tmux attach -t myproject-437
-Claude session:  claude --resume myproject-437
-ntfy topic:      https://ntfy.sh/myproject-437
+tmux session:    tmux attach -t myproject-847291
+Claude session:  claude --resume myproject-847291
+ntfy topic:      https://ntfy.sh/myproject-847291
 ```
 
-- The 3-digit random suffix makes the ntfy topic hard to guess
+- The 6-digit random suffix (900,000 possibilities) makes the ntfy topic hard to guess
 - tmux sessions survive SSH disconnects — reconnect and see exactly where things stand
 - Claude sessions can be resumed by name if context is cleared
 
@@ -214,7 +214,7 @@ Only notifies on **changes or problems** — no spam.
 | Works inside Claude | Yes | External wrapper | External wrapper | External wrapper |
 | Rate limit recovery | Yes | No | Yes | No |
 | Uses Claude Code built-ins (/loop, /rename) | Yes | N/A | N/A | N/A |
-| No external setup | Yes | Needs bash script | Needs bash script | Needs brew |
+| No required setup (externals optional) | Yes | Needs bash script | Needs bash script | Needs brew |
 
 ---
 
