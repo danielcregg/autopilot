@@ -47,6 +47,8 @@ git clone https://github.com/danielcregg/autopilot.git ~/.claude/skills/autopilo
 
 For **Claude Desktop**: Settings > Skills > Upload skill > drag and drop `SKILL.md`.
 
+**Important**: For truly uninterrupted work, enable Auto mode or bypass permissions in your Claude Code settings. Without this, Claude may pause for tool approvals.
+
 ---
 
 ## Three Modes

@@ -57,7 +57,7 @@ SESSION_SUFFIX=$(command -v shuf &>/dev/null && shuf -i 100000-999999 -n 1 || \
 SESSION_NAME="${PROJECT_NAME}-${SESSION_SUFFIX}"
 
 # Save session name to file (persists across bash tool calls)
-echo "$SESSION_NAME" > /tmp/autopilot-session-name
+echo "$SESSION_NAME" > ${TMPDIR:-/tmp}/autopilot-session-name
 
 # Set up tmux if available (optional — skip if not installed)
 if command -v tmux &>/dev/null && [ -z "$TMUX" ]; then
@@ -65,7 +65,7 @@ if command -v tmux &>/dev/null && [ -z "$TMUX" ]; then
   while tmux has-session -t "$SESSION_NAME" 2>/dev/null; do
     SESSION_SUFFIX=$((RANDOM * RANDOM % 900000 + 100000))
     SESSION_NAME="${PROJECT_NAME}-${SESSION_SUFFIX}"
-    echo "$SESSION_NAME" > /tmp/autopilot-session-name
+    echo "$SESSION_NAME" > ${TMPDIR:-/tmp}/autopilot-session-name
   done
   tmux new-session -d -s "$SESSION_NAME"
   echo "tmux session: $SESSION_NAME"
@@ -78,10 +78,10 @@ fi
 if curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 https://ntfy.sh 2>/dev/null | grep -q "200"; then
   echo "ntfy topic: $SESSION_NAME"
   echo "Subscribe: https://ntfy.sh/$SESSION_NAME"
-  echo "true" > /tmp/autopilot-ntfy-enabled
+  echo "true" > ${TMPDIR:-/tmp}/autopilot-ntfy-enabled
 else
   echo "ntfy.sh not reachable — notifications disabled"
-  echo "false" > /tmp/autopilot-ntfy-enabled
+  echo "false" > ${TMPDIR:-/tmp}/autopilot-ntfy-enabled
 fi
 
 echo "Session name: $SESSION_NAME"
@@ -98,8 +98,8 @@ After running the setup, **rename the Claude session** to match. This is a Claud
 Since bash variables don't persist between tool calls, read from the file:
 
 ```bash
-SESSION_NAME=$(cat /tmp/autopilot-session-name)
-NTFY_ENABLED=$(cat /tmp/autopilot-ntfy-enabled 2>/dev/null || echo "false")
+SESSION_NAME=$(cat ${TMPDIR:-/tmp}/autopilot-session-name)
+NTFY_ENABLED=$(cat ${TMPDIR:-/tmp}/autopilot-ntfy-enabled 2>/dev/null || echo "false")
 ```
 
 ### Sending Notifications
@@ -107,8 +107,8 @@ NTFY_ENABLED=$(cat /tmp/autopilot-ntfy-enabled 2>/dev/null || echo "false")
 Only send if ntfy is enabled:
 
 ```bash
-SESSION_NAME=$(cat /tmp/autopilot-session-name)
-NTFY_ENABLED=$(cat /tmp/autopilot-ntfy-enabled 2>/dev/null || echo "false")
+SESSION_NAME=$(cat ${TMPDIR:-/tmp}/autopilot-session-name)
+NTFY_ENABLED=$(cat ${TMPDIR:-/tmp}/autopilot-ntfy-enabled 2>/dev/null || echo "false")
 if [ "$NTFY_ENABLED" = "true" ]; then
   curl -s -H "Title: $SESSION_NAME" -d "Your message here" https://ntfy.sh/$SESSION_NAME
 fi
@@ -122,17 +122,19 @@ SESSION_NAME = myproject-847291
 tmux session:    tmux attach -t myproject-847291
 Claude session:  claude --resume myproject-847291
 ntfy topic:      https://ntfy.sh/myproject-847291
-State file:      /tmp/autopilot-session-name
+State file:      ${TMPDIR:-/tmp}/autopilot-session-name
 ```
 
 All three use the same name. One name to remember, one name to share.
 The 6-digit suffix (900,000 possibilities) makes the ntfy topic hard to guess.
 
+**Security note**: ntfy topics are public by default. Don't include secrets (API keys, passwords) in notification messages. For sensitive projects, use `openssl rand -hex 12` as the suffix instead, or configure [ntfy access control](https://docs.ntfy.sh/config/#access-control).
+
 ---
 
 ## Core Rules
 
-1. **Never stop to ask the user a question.** Make a reasonable decision, document it, and move on. If you need a code review or second opinion, use Codex or Gemini.
+1. **Never stop to ask the user a question** (except for the cases listed under "When to Contact the User" below). Make a reasonable decision, document it, and move on. If you need a code review or second opinion, use Codex or Gemini.
 2. **Never wait idly.** While a background task runs, pick up the next independent task.
 3. **Use background tasks for anything that takes more than 30 seconds.** Kick it off, work on something else, check back later.
 4. **Track progress visibly.** Update tasks after each step.
@@ -250,8 +252,8 @@ Uses [ntfy.sh](https://ntfy.sh) — free, open-source, no account needed.
 Always read session name from file (variables don't persist between bash calls):
 
 ```bash
-SESSION_NAME=$(cat /tmp/autopilot-session-name 2>/dev/null || echo "autopilot")
-NTFY_ENABLED=$(cat /tmp/autopilot-ntfy-enabled 2>/dev/null || echo "false")
+SESSION_NAME=$(cat ${TMPDIR:-/tmp}/autopilot-session-name 2>/dev/null || echo "autopilot")
+NTFY_ENABLED=$(cat ${TMPDIR:-/tmp}/autopilot-ntfy-enabled 2>/dev/null || echo "false")
 
 # Only send if ntfy is enabled
 if [ "$NTFY_ENABLED" = "true" ]; then
@@ -289,7 +291,7 @@ fi
 
 ## Asking Other AI Models for Help
 
-Don't ask the user. Ask another AI model instead. Always check availability first.
+Don't ask the user. Ask another AI model instead. These CLIs require separate installation and credentials — they're optional enhancements, not requirements. Always check availability first.
 
 ### Codex (OpenAI) — if installed
 
